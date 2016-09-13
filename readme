@@ -1,0 +1,1 @@
+env GOPATH=`pwd` go get github.com/miekg/dns
