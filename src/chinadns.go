@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type routeIp struct {
@@ -173,52 +174,86 @@ func init() {
 	dnsAddr = strings.Split("114.114.114.114,223.5.5.5,8.8.8.8,8.8.4.4,208.67.222.222:443,208.67.222.222:5353", ",")
 }
 
+type dnsPacket struct {
+	dnsType string
+	packet  []byte
+}
+
 func selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, localBuf []byte) {
 
+	packet := make(chan dnsPacket, len(dnsAddr))
+	timeout := make(chan bool, 1)
 	for _, dnsA := range dnsAddr {
-		pos := strings.Index(dnsA, ":")
-		if pos == -1 {
-			dnsA += ":53"
-		}
-
-		addr, err := net.ResolveUDPAddr("udp", dnsA)
-		if err != nil {
-			log.Printf("Can't resolve address: %v", err)
-			return
-		}
-
-		cliConn, err := net.DialUDP("udp", nil, addr)
-		if err != nil {
-			log.Printf("Can't dial: ", err)
-			return
-		}
-		defer cliConn.Close()
-
-		_, err = cliConn.Write(localBuf)
-		remoteBuf := make([]byte, 1024)
-		_, err = cliConn.Read(remoteBuf)
-		if err != nil {
-			log.Printf("read udp msg fail: %v\n", err)
-			return
-		}
-		m := new(dns.Msg)
-		m.Unpack(remoteBuf)
-		/*
-			log.Printf("####start######:::")
-			for i, v := range m.Answer {
-				log.Printf("##%d##(%v)(%v)(%v)(%s)\n", i, v, v.Header(), v.String(), v.Header().Name)
+		go func(dnsA string) {
+			pos := strings.Index(dnsA, ":")
+			if pos == -1 {
+				dnsA += ":53"
 			}
-			log.Printf("####end#####:::\n")
-		*/
+
+			addr, err := net.ResolveUDPAddr("udp", dnsA)
+			if err != nil {
+				log.Printf("Can't resolve address: %v", err)
+				return
+			}
+
+			cliConn, err := net.DialUDP("udp", nil, addr)
+			if err != nil {
+				log.Printf("Can't dial: ", err)
+				return
+			}
+			defer cliConn.Close()
+
+			// todo set timeout
+			_, err = cliConn.Write(localBuf)
+			remoteBuf := make([]byte, 1024)
+			_, err = cliConn.Read(remoteBuf)
+			if err != nil {
+				log.Printf("read udp msg fail: %v\n", err)
+				return
+			}
+
+			m := new(dns.Msg)
+			m.Unpack(remoteBuf)
+
+			if true {
+				packet <- dnsPacket{"chinese", remoteBuf}
+			} else {
+				packet <- dnsPacket{"other", remoteBuf}
+			}
+			/*
+				log.Printf("####start######:::")
+				for i, v := range m.Answer {
+					log.Printf("##%d##(%v)(%v)(%v)(%s)\n", i, v, v.Header(), v.String(), v.Header().Name)
+				}
+				log.Printf("####end#####:::\n")
+			*/
+		}(dnsA)
 	}
 
+	go func() {
+		time.Sleep(time.Second * 1)
+		timeout <- true
+	}()
+	i := 0
+	p := dnsPacket{}
 	select {
 
-	case <-other:
-	case <-chinese:
+	case p = <-packet:
+		i++
+		if p.dnsType == "chinese" {
+			break
+		}
+
+		if i == len(dnsAddr) {
+			break
+		}
+
+		log.Printf("packet\n")
 	case <-timeout:
+		log.Printf("timeout\n")
+		return
 	}
-	conn.WriteToUDP(remoteBuf, remoteAddr)
+	conn.WriteToUDP(p.packet, remoteAddr)
 }
 
 func handleClient(conn *net.UDPConn) {
