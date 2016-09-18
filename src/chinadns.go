@@ -33,7 +33,7 @@ func (ip ByIp) Swap(i, j int) { ip[i], ip[j] = ip[j], ip[i] }
 // big ... small
 func (ip ByIp) Less(i, j int) bool { return ip[i].Ip > ip[j].Ip }
 
-func ip2int(ipstr string) (uint32, error) {
+func strIp2Int(ipstr string) (uint32, error) {
 
 	l := 0
 	ip := uint32(0)
@@ -84,14 +84,14 @@ func newRouteList(fname string) *RouteList {
 		lineno++
 		ls := strings.Split(line, "/")
 		if len(ls) != 2 {
-			log.Printf("warn: line format is ip/mask")
+			log.Printf("WARN: line format is ip/mask")
 			continue
 		}
 		//log.Printf("line is (%s):first(%s) second(%s)\n", line, ls[0], ls[1])
 
-		ipint, err := ip2int(ls[0])
+		ipint, err := strIp2Int(ls[0])
 		if err != nil {
-			log.Printf("warn: invalid addr %s in %s:%d:%v\n", ls[0], lineno, ipint)
+			log.Printf("WARN: invalid addr %s in %s:%d:%v\n", ls[0], lineno, ipint)
 			continue
 		}
 
@@ -101,7 +101,7 @@ func newRouteList(fname string) *RouteList {
 		}
 		m, err := strconv.Atoi(string(maskBytes))
 		if err != nil {
-			log.Printf("warn: invalid mask %s in %s:%d\n", ls[1], lineno, m, err)
+			log.Printf("WARN: invalid mask %s in %s:%d\n", ls[1], lineno, m, err)
 			continue
 		}
 
@@ -142,13 +142,13 @@ func TestnewRouteList() {
 
 	r := newRouteList(*chnroute_file)
 
-	n, _ := ip2int("1.0.1.1")
+	n, _ := strIp2Int("1.0.1.1")
 	log.Printf("%v\n", r.testIpInList(n))
 
-	n, _ = ip2int("1.0.1.3")
+	n, _ = strIp2Int("1.0.1.3")
 	log.Printf("%v\n", r.testIpInList(n))
 
-	n, _ = ip2int("1.0.1.4")
+	n, _ = strIp2Int("1.0.1.4")
 	log.Printf("%v\n", r.testIpInList(n))
 }
 
@@ -175,11 +175,22 @@ func init() {
 }
 
 type dnsPacket struct {
-	dnsType string
-	packet  []byte
+	dnsType     string
+	packet      []byte
+	debugString string
 }
 
-func selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, localBuf []byte) {
+func getIp(s string) (uint32, error) {
+	a := strings.Split(s, "\t")
+	ipStr := a[len(a)-1]
+	ip, err := strIp2Int(ipStr)
+	if err != nil {
+		return 0, fmt.Errorf("ip is %s:%s", ipStr, err)
+	}
+	return ip, nil
+}
+
+func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, localBuf []byte) {
 
 	packet := make(chan dnsPacket, len(dnsAddr))
 	timeout := make(chan bool, 1)
@@ -208,25 +219,47 @@ func selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, localBuf []byte) {
 			remoteBuf := make([]byte, 1024)
 			_, err = cliConn.Read(remoteBuf)
 			if err != nil {
-				log.Printf("read udp msg fail: %v\n", err)
+				log.Printf("read remote udp msg fail: %v\n", err)
 				return
 			}
 
 			m := new(dns.Msg)
-			m.Unpack(remoteBuf)
-
-			if true {
-				packet <- dnsPacket{"chinese", remoteBuf}
-			} else {
-				packet <- dnsPacket{"other", remoteBuf}
+			err = m.Unpack(remoteBuf)
+			if err != nil {
+				log.Printf("ERROR: dns server addr is (%s) errmsg is (%s)\n", dnsAddr, err)
+				return
 			}
-			/*
-				log.Printf("####start######:::")
-				for i, v := range m.Answer {
-					log.Printf("##%d##(%v)(%v)(%v)(%s)\n", i, v, v.Header(), v.String(), v.Header().Name)
+
+			if len(m.Answer) == 0 {
+				log.Printf("WARN: answer size is 0:(%#v)\n", m)
+			}
+
+			flag := false
+			debugString := ""
+			for i, v := range m.Answer {
+				ip, err := getIp(v.String())
+				if err != nil {
+					log.Printf("ERROR: get ip error:%s:String(%s)\n", err, v.String())
+					continue
 				}
-				log.Printf("####end#####:::\n")
-			*/
+
+				debugString = v.String()
+				log.Printf("##%d##(1-->%#v)(2-->%v)(3-->%v)(4-->%s)\n", i, v, v.Header(), v.String(), v.Header().Name)
+				if flag == false {
+					if flag = c.route.testIpInList(ip); flag == true {
+						break
+					}
+				}
+			}
+
+			if flag {
+				packet <- dnsPacket{"chinese", remoteBuf, debugString}
+			} else {
+				for _, v := range m.Answer {
+					log.Printf("debug:debugString(%s)(%s)\n", debugString, v)
+				}
+				packet <- dnsPacket{"other", remoteBuf, debugString}
+			}
 		}(dnsA)
 	}
 
@@ -248,15 +281,17 @@ func selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, localBuf []byte) {
 			break
 		}
 
-		log.Printf("packet\n")
 	case <-timeout:
 		log.Printf("timeout\n")
 		return
 	}
+	log.Printf("DEBUG: packet-->dns type(%s) debugString(%s) packet size(%d)\n",
+		p.dnsType, p.debugString, len(p.packet))
+
 	conn.WriteToUDP(p.packet, remoteAddr)
 }
 
-func handleClient(conn *net.UDPConn) {
+func (c chinaDNS) handleClient(conn *net.UDPConn) {
 
 	localBuf := make([]byte, 1024)
 	n, remoteAddr, err := conn.ReadFromUDP(localBuf)
@@ -265,9 +300,9 @@ func handleClient(conn *net.UDPConn) {
 		return
 	}
 
-	log.Printf("read local udp data %d\n", n)
+	log.Printf("DEBUG: read local udp data %d\n", n)
 	go func() {
-		selectPacket(conn, remoteAddr, localBuf)
+		c.selectPacket(conn, remoteAddr, localBuf)
 	}()
 }
 
@@ -286,7 +321,7 @@ func (c chinaDNS) updServe() {
 
 	defer conn.Close()
 	for {
-		handleClient(conn)
+		c.handleClient(conn)
 	}
 }
 
