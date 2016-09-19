@@ -1,1 +1,3 @@
 env GOPATH=`pwd` go get github.com/miekg/dns
+env GOPATH=`pwd` go build src/chinadns.go
+./chinadns

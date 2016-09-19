@@ -62,7 +62,7 @@ func strIp2Int(ipstr string) (uint32, error) {
 func newRouteList(fname string) *RouteList {
 	f, err := os.Open(fname)
 	if err != nil {
-		log.Printf("open %s fail:%v\n", fname)
+		log.Printf("ERROR: open %s fail:%v\n", fname)
 		return nil
 	}
 	defer f.Close()
@@ -77,7 +77,7 @@ func newRouteList(fname string) *RouteList {
 		}
 
 		if e != nil {
-			log.Printf("read line fail:%v\n", e)
+			log.Printf("ERROR: read line fail:%v\n", e)
 			return nil
 		}
 
@@ -97,6 +97,9 @@ func newRouteList(fname string) *RouteList {
 
 		maskBytes := []byte(ls[1])
 		if maskBytes[len(maskBytes)-1] == '\n' {
+			maskBytes = maskBytes[:len(maskBytes)-1]
+		}
+		if maskBytes[len(maskBytes)-1] == '\r' {
 			maskBytes = maskBytes[:len(maskBytes)-1]
 		}
 		m, err := strconv.Atoi(string(maskBytes))
@@ -217,6 +220,7 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			// todo set timeout
 			_, err = cliConn.Write(localBuf)
 			remoteBuf := make([]byte, 1024)
+			cliConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			_, err = cliConn.Read(remoteBuf)
 			if err != nil {
 				log.Printf("read remote udp msg fail: %v\n", err)
@@ -296,7 +300,7 @@ func (c chinaDNS) handleClient(conn *net.UDPConn) {
 	localBuf := make([]byte, 1024)
 	n, remoteAddr, err := conn.ReadFromUDP(localBuf)
 	if err != nil {
-		fmt.Println("failed to read UDP msg because of ", err.Error())
+		fmt.Println("ERROR: failed to read UDP msg because of ", err.Error())
 		return
 	}
 
@@ -309,13 +313,13 @@ func (c chinaDNS) handleClient(conn *net.UDPConn) {
 func (c chinaDNS) updServe() {
 	addr, err := net.ResolveUDPAddr("udp", c.sa)
 	if err != nil {
-		log.Printf("Cant't resolve address:%v\n", err)
+		log.Printf("ERROR: Cant't resolve address:%v\n", err)
 		return
 	}
 
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
-		log.Printf("listeing fail:%v\n", err)
+		log.Printf("ERROR: listeing fail:%v\n", err)
 		return
 	}
 
@@ -328,7 +332,12 @@ func (c chinaDNS) updServe() {
 func main() {
 	sa := flag.String("sa", ":53", "dns addr:port")
 	fname := flag.String("fn", "./chnroute.txt", "china route list")
+	ds := flag.String("ds", "", "dns server address")
 	flag.Parse()
+
+	if *ds != "" {
+		dnsAddr = []string{*ds}
+	}
 
 	c := newChinaDNS(*fname, *sa)
 	if c == nil {
