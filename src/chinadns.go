@@ -139,10 +139,6 @@ func (r *RouteList) testIpInList(ip uint32) bool {
 
 	if n < len(r.r) {
 		route := r.r[n]
-		// if ((route.IpInt ^ ip) & route.mask) > 0 {
-		// 	return false
-		// }
-		// return true
 		if (route.mask & ip) == route.IpInt {
 			return true
 		}
@@ -276,7 +272,6 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 				}
 
 				debugString = "Server:" + dnsA + " | "+getName(v.String()) +  "->" + getIpString(v.String()) 
-				//log.Printf("##%d##(1-->%#v)(2-->%v)(3-->%v)(4-->%s)\n", i, v, v.Header(), v.String(), v.Header().Name)
 				//log.Printf("##%d##(server :%#v) (result :%#v %#v)\n", i, dnsA, getName(v.String()),getIpString(v.String()) )
 				if flag == false {
 					if flag = c.route.testIpInList(ip); flag == true {
@@ -291,16 +286,10 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			}
 
 			if flag {
-				//log.Printf("##%d##(server :%#v) (result :%#v %#v)\n", i, dnsA, getName(v.String()),getIpString(v.String()) )
 				if (dnsAddr[0] == dnsB) || (dnsAddr[1] == dnsB) {
 				  packet <- dnsPacket{"chinese", remoteBuf, debugString}
 			    }
 			} else {
-				//for _, v := range m.Answer {
-
-
-					//log.Printf("debug:debugString(%s)(%s)\n", debugString, v)
-				//}
 				if (dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB){
 				  packet <- dnsPacket{"oversea", remoteBuf, debugString}
 			    }
@@ -312,15 +301,11 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 		time.Sleep(time.Second * 1)
 		timeout <- true
 	}()
-	//i := 0
 	p := dnsPacket{}
 	select {
 
 	case p = <-packet:
-		// i++
-		// if p.dnsType == "chinese" {
-		// 	break
-		// }
+		
 
 		log.Printf("[%s] %s, packet size(%d)\n",p.dnsType, p.debugString, len(p.packet))
 
@@ -328,18 +313,11 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 
 	    return
 
-		// if i == len(dnsAddr) {
-		// 	break
-		// }
-
 	case <-timeout:
 		log.Printf("timeout\n")
 		return
 	}
-	// log.Printf("DEBUG: packet-->dns type(%s) debugString(%s) packet size(%d)\n",
-	// 	p.dnsType, p.debugString, len(p.packet))
-
-	// conn.WriteToUDP(p.packet, remoteAddr)
+	
 }
 
 func (c chinaDNS) handleClient(conn *net.UDPConn) {
@@ -380,7 +358,6 @@ func (c chinaDNS) updServe() {
 
 func main() {
    
-    //TestnewRouteList()
 
 	sa := flag.String("sa", ":53", "dns addr:port")
 	fname := flag.String("fn", "./chnroute.txt", "china route list")
@@ -397,10 +374,5 @@ func main() {
 	}
 	c.updServe()
 	
-	// sip := "192.168.1.10"
-	// ip,err := strIp2Int(sip)
-	// if err == nil{
-	// 	log.Printf("ip = %#v, result = %x \n", sip,ip )
-	// }
 	//TestnewRouteList()
 }
