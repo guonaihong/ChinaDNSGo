@@ -298,12 +298,17 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			}
 
 			if len(m.Answer) == 0 {
-				log.Printf("WARN: answer size is 0 from %s for %s \n",dnsA,inputPara)
+				//log.Printf("WARN: answer size is 0 from %s for %s \n",dnsA,inputPara)
+				return 
 			}
 
 			flag := false
 			debugString := ""
+			isCname := true
 			for i, v := range m.Answer {
+                 
+                debugString = "Server:" + dnsA + " | "+inputPara +  "->" + getIpString(v.String()) 
+
 				ip, err := getIp(v.String())
 				if err != nil {
 
@@ -312,7 +317,9 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 					continue
 				}
 
-				debugString = "Server:" + dnsA + " | "+inputPara +  "->" + getIpString(v.String()) 
+				isCname = false
+
+				//debugString = "Server:" + dnsA + " | "+inputPara +  "->" + getIpString(v.String()) 
 				//log.Printf("##%d##(server :%#v) (result :%#v %#v)\n", i, dnsA, getName(v.String()),getIpString(v.String()) )
 				if flag == false {
 					if flag = c.route.testIpInList(ip); flag == true {
@@ -327,12 +334,32 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			}
 
 			if flag {
-				if (dnsAddr[0] == dnsB) || (dnsAddr[1] == dnsB) {
-				  packet <- dnsPacket{"chinese", remoteBuf, debugString}
-			    }
+				// if (dnsAddr[0] == dnsB) || (dnsAddr[1] == dnsB) {
+				//   packet <- dnsPacket{"chinese", remoteBuf, debugString}
+			 //    }
+
+			 //    if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){
+				//   packet <- dnsPacket{"chinese", remoteBuf, debugString}
+			 //    }
+
+			    packet <- dnsPacket{"chinese", remoteBuf, debugString}
+
 			} else {
-				if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){
+                if (dnsAddr[0] == dnsB) || (dnsAddr[1] == dnsB) {
+                  // only process domestic dns return CNAME case. ignore Class A case
+                  if (isCname == true) {
+				    packet <- dnsPacket{"cname", remoteBuf, debugString}
+				  }
+			    }
+
+				if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){  
+
+
+				  if (isCname == true) {
+				    packet <- dnsPacket{"cname", remoteBuf, debugString}
+				  }else{
 				  packet <- dnsPacket{"oversea", remoteBuf, debugString}
+				  }
 			    }
 			}
 		}(dnsA)
