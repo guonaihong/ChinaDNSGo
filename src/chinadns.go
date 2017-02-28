@@ -183,7 +183,7 @@ func newChinaDNS(fname string, sa string) *chinaDNS {
 var dnsAddr []string
 
 func init() {
-	dnsAddr = strings.Split("180.76.76.76,182.254.116.116,208.67.222.222:443,208.67.222.222:5353", ",")
+	dnsAddr = strings.Split("180.76.76.76,182.254.116.116,208.67.222.222:443,208.67.220.220:5353", ",")
 }
 
 type dnsPacket struct {
@@ -214,7 +214,48 @@ func getIpString(s string) (string) {
 	return ipStr
 }
 
+func getParameter(localBuf []byte) (string){
+
+   
+   s := "" 
+   i := 0
+   for {
+     c := localBuf[i]
+
+     if (c == 0) || (i>80) {
+     	return s
+     }
+    
+    printable := false
+    if (c >= 'a') && (c<='z'){
+      printable = true
+    }
+    if (c >= 'A') && (c<='Z'){
+      printable = true
+    }
+    if (c >= '1') && (c<='9'){
+      printable = true
+    }
+
+
+     tc := string(c)
+     if (printable == false) {
+       tc = "."
+     }
+     
+     s = s + tc
+     i = i + 1
+
+   }
+
+   return s
+
+}
+
 func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, localBuf []byte) {
+
+
+    inputPara := getParameter(localBuf[13:])
 
 	packet := make(chan dnsPacket, len(dnsAddr))
 	timeout := make(chan bool, 1)
@@ -245,7 +286,7 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			cliConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			_, err = cliConn.Read(remoteBuf)
 			if err != nil {
-				log.Printf("read remote udp msg fail: %v\n", err)
+				//log.Printf("read udp fail: %s %v\n",inputPara, err)
 				return
 			}
 
@@ -257,7 +298,7 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			}
 
 			if len(m.Answer) == 0 {
-				log.Printf("WARN: answer size is 0 from %s\n",dnsA)
+				log.Printf("WARN: answer size is 0 from %s for %s \n",dnsA,inputPara)
 			}
 
 			flag := false
@@ -271,7 +312,7 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 					continue
 				}
 
-				debugString = "Server:" + dnsA + " | "+getName(v.String()) +  "->" + getIpString(v.String()) 
+				debugString = "Server:" + dnsA + " | "+inputPara +  "->" + getIpString(v.String()) 
 				//log.Printf("##%d##(server :%#v) (result :%#v %#v)\n", i, dnsA, getName(v.String()),getIpString(v.String()) )
 				if flag == false {
 					if flag = c.route.testIpInList(ip); flag == true {
@@ -290,7 +331,7 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 				  packet <- dnsPacket{"chinese", remoteBuf, debugString}
 			    }
 			} else {
-				if (dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB){
+				if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){
 				  packet <- dnsPacket{"oversea", remoteBuf, debugString}
 			    }
 			}
@@ -307,14 +348,14 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 	case p = <-packet:
 		
 
-		log.Printf("[%s] %s, packet size(%d)\n",p.dnsType, p.debugString, len(p.packet))
+		log.Printf("[%s] %s\n",p.dnsType, p.debugString)
 
 	    conn.WriteToUDP(p.packet, remoteAddr)
 
 	    return
 
 	case <-timeout:
-		log.Printf("timeout\n")
+		log.Printf("Query %s timeout!\n",inputPara)
 		return
 	}
 	
