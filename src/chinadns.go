@@ -147,7 +147,7 @@ func (r *RouteList) testIpInList(ip uint32) bool {
 }
 
 func TestnewRouteList() {
-	chnroute_file := flag.String("c", "./chnroute.txt", "china route list")
+	chnroute_file := flag.String("c", "/etc/chinadns/chnroute.txt", "china route list")
 
 	r := newRouteList(*chnroute_file)
 
@@ -183,7 +183,8 @@ func newChinaDNS(fname string, sa string) *chinaDNS {
 var dnsAddr []string
 
 func init() {
-	dnsAddr = strings.Split("180.76.76.76,182.254.116.116,208.67.222.222:443,208.67.220.220:5353", ",")
+	//dnsAddr = strings.Split("180.76.76.76,182.254.116.116,208.67.222.222:443,192.168.8.1", ",")
+	dnsAddr = strings.Split("180.76.76.76,119.29.29.29,208.67.222.222:443,192.168.8.1", ",")
 }
 
 type dnsPacket struct {
@@ -260,12 +261,20 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 	packet := make(chan dnsPacket, len(dnsAddr))
 	timeout := make(chan bool, 1)
 	for _, dnsA := range dnsAddr {
+
+
+
 		go func(dnsA string) {
 			pos := strings.Index(dnsA, ":")
 			dnsB := dnsA
 			if pos == -1 {
 				dnsA += ":53"
+			}else {
+			  dnsB = dnsA[:pos]	
 			}
+
+            ti, err := strIp2Int(dnsB)
+			is_chn_dns_server := c.route.testIpInList(ti)
 
 			addr, err := net.ResolveUDPAddr("udp", dnsA)
 			if err != nil {
@@ -334,6 +343,8 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			}
 
 			if flag {
+				// this is a china ip 
+				
 				// if (dnsAddr[0] == dnsB) || (dnsAddr[1] == dnsB) {
 				//   packet <- dnsPacket{"chinese", remoteBuf, debugString}
 			 //    }
@@ -341,18 +352,30 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			 //    if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){
 				//   packet <- dnsPacket{"chinese", remoteBuf, debugString}
 			 //    }
+                if is_chn_dns_server {
+                  packet <- dnsPacket{"chinese", remoteBuf, debugString}	
+                } else {
+                  log.Printf("ignore chn ip %v\n", debugString )
+			
+                  //packet <- dnsPacket{"chinese", remoteBuf, debugString}
+                }
 
-			    packet <- dnsPacket{"chinese", remoteBuf, debugString}
+
 
 			} else {
-                if (dnsAddr[0] == dnsB) || (dnsAddr[1] == dnsB) {
+      
+                 // this is not a china ip
+                 
+                if (is_chn_dns_server == true) {
                   // only process domestic dns return CNAME case. ignore Class A case
                   if (isCname == true) {
 				    packet <- dnsPacket{"cname", remoteBuf, debugString}
-				  }
-			    }
+				  }else{
+				  	log.Printf("ignore oversea ip %v\n", debugString )
+				  } 
 
-				if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){  
+
+			    }else{  
 
 
 				  if (isCname == true) {
@@ -428,7 +451,7 @@ func main() {
    
 
 	sa := flag.String("sa", ":53", "dns addr:port")
-	fname := flag.String("fn", "./chnroute.txt", "china route list")
+	fname := flag.String("fn", "/etc/chinadns/chnroute.txt", "china route list")
 	ds := flag.String("ds", "", "dns server address")
 	flag.Parse()
 
