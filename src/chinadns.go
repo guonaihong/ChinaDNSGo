@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"my_aes"
 )
 
 type routeIp struct {
@@ -181,10 +183,16 @@ func newChinaDNS(fname string, sa string) *chinaDNS {
 }
 
 var dnsAddr []string
+var in_key string
+var out_key string
+var out_ip string
 
 func init() {
 	//dnsAddr = strings.Split("180.76.76.76,182.254.116.116,208.67.222.222:443,192.168.8.1", ",")
 	dnsAddr = strings.Split("180.76.76.76,119.29.29.29,208.67.222.222:443,192.168.8.1", ",")
+	in_key  = ""
+	out_key = ""
+	out_ip = ""
 }
 
 type dnsPacket struct {
@@ -273,6 +281,12 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			  dnsB = dnsA[:pos]	
 			}
 
+			// if (dnsB == "127.0.0.1") {
+			// 	if c.sa == ":5300" {
+			// 		return
+			// 	}
+			// }
+
             ti, err := strIp2Int(dnsB)
 			is_chn_dns_server := c.route.testIpInList(ti)
 
@@ -288,6 +302,16 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 				return
 			}
 			defer cliConn.Close()
+
+			if (dnsB == out_ip)  {
+				   if out_key != "" {
+					key := []byte(out_key)
+				    localBuf, err = my_aes.AesEncrypt(localBuf, key)
+				    if err != nil {
+				        panic(err)
+			        } 
+			     }
+			}
 
 			// todo set timeout
 			_, err = cliConn.Write(localBuf)
@@ -420,6 +444,14 @@ func (c chinaDNS) handleClient(conn *net.UDPConn) {
 		return
 	}
 
+	if in_key != "" {
+		key := []byte(in_key)
+		localBuf, err = my_aes.AesDecrypt(localBuf, key)
+        if err != nil {
+          panic(err)
+        }
+	}
+
 	//log.Printf("DEBUG: read local udp data %d\n", n)
 	if n>2 {}
 
@@ -450,14 +482,49 @@ func (c chinaDNS) updServe() {
 func main() {
    
 
+    //  port := ":53"
+    //  for i, v := range os.Args {
+    //     if i> 0 {
+    //       //fmt.Printf("%d %#v\n",i,v)
+    //       if v == "-s" {
+    //         fmt.Printf("%d %#v\n",i,os.Args[i+1])
+    //       }
+
+    //       if v == "-p" {
+    //         fmt.Printf("Listen on port %#v\n",os.Args[i+1])
+    //         port = ":" + os.Args[i+1]
+    //       }
+    //   }
+    // }
+
 	sa := flag.String("sa", ":53", "dns addr:port")
 	fname := flag.String("fn", "/etc/chinadns/chnroute.txt", "china route list")
 	ds := flag.String("ds", "", "dns server address")
+	ine := flag.String("ie", "", "ciph incoming traffic")
+	oue := flag.String("oe", "", "ciph outgoing traffic")
+	ouip := flag.String("ip", "", "outgoing traffic ip")
 	flag.Parse()
 
 	if *ds != "" {
 		dnsAddr = []string{*ds}
 	}
+
+	if *ine != "" {
+		in_key = *ine
+		fmt.Printf("Incoming Ciph Enabled key = [%#v]\n",in_key)
+	}
+
+	if *oue != "" {
+		out_key = *oue
+		fmt.Printf("outgoing Ciph Enabled key = [%#v]\n",out_key)
+	}
+
+	if *ouip != "" {
+		out_ip = *ouip
+		fmt.Printf("outgoing Ciph Enabled ip = [%#v] ",out_ip)
+	}
+
+
 
 	c := newChinaDNS(*fname, *sa)
 	if c == nil {
