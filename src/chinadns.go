@@ -506,7 +506,11 @@ func main() {
 	flag.Parse()
 
 	if *ds != "" {
-		dnsAddr = []string{*ds}
+		dnsAddr = strings.Split(*ds,",")
+		for _, v := range dnsAddr {
+
+		  fmt.Printf("dns server = [%#v]\n",v)
+	    }
 	}
 
 	if *ine != "" {
