@@ -111,8 +111,8 @@ func newRouteList(fname string) *RouteList {
 		}
 
 		mask := ^(^(uint32(0)) >> uint32(m))
-  
-        //log.Printf("line:%v  %v:%v %x %x %x  \n",lineno, ls[0],m, ipint,mask, ipint&mask)
+
+		//log.Printf("line:%v  %v:%v %x %x %x  \n",lineno, ls[0],m, ipint,mask, ipint&mask)
 
 		list.r = append(list.r, routeIp{
 			Ip:    string(ls[0]),
@@ -190,7 +190,7 @@ var out_ip string
 func init() {
 	//dnsAddr = strings.Split("180.76.76.76,182.254.116.116,208.67.222.222:443,192.168.8.1", ",")
 	dnsAddr = strings.Split("180.76.76.76,119.29.29.29,208.67.222.222:443,192.168.8.1", ",")
-	in_key  = ""
+	in_key = ""
 	out_key = ""
 	out_ip = ""
 }
@@ -211,74 +211,69 @@ func getIp(s string) (uint32, error) {
 	return ip, nil
 }
 
-func getName(s string) (string) {
+func getName(s string) string {
 	a := strings.Split(s, "\t")
 	ipStr := a[0]
 	return ipStr
 }
 
-func getIpString(s string) (string) {
+func getIpString(s string) string {
 	a := strings.Split(s, "\t")
 	ipStr := a[len(a)-1]
 	return ipStr
 }
 
-func getParameter(localBuf []byte) (string){
+func getParameter(localBuf []byte) string {
 
-   
-   s := "" 
-   i := 0
-   for {
-     c := localBuf[i]
+	s := ""
+	i := 0
+	for {
+		c := localBuf[i]
 
-     if (c == 0) || (i>80) {
-     	return s
-     }
-    
-    printable := false
-    if (c >= 'a') && (c<='z'){
-      printable = true
-    }
-    if (c >= 'A') && (c<='Z'){
-      printable = true
-    }
-    if (c >= '1') && (c<='9'){
-      printable = true
-    }
+		if (c == 0) || (i > 80) {
+			return s
+		}
 
+		printable := false
+		if (c >= 'a') && (c <= 'z') {
+			printable = true
+		}
+		if (c >= 'A') && (c <= 'Z') {
+			printable = true
+		}
+		if (c >= '1') && (c <= '9') {
+			printable = true
+		}
 
-     tc := string(c)
-     if (printable == false) {
-       tc = "."
-     }
-     
-     s = s + tc
-     i = i + 1
+		tc := string(c)
+		if printable == false {
+			tc = "."
+		}
 
-   }
+		s = s + tc
+		i = i + 1
 
-   return s
+	}
+
+	return s
 
 }
 
 func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, localBuf []byte) {
 
-
-    inputPara := getParameter(localBuf[13:])
+	inputPara := getParameter(localBuf[13:])
 
 	packet := make(chan dnsPacket, len(dnsAddr))
 	timeout := make(chan bool, 1)
 	for _, dnsA := range dnsAddr {
-
-
 
 		go func(dnsA string) {
 			pos := strings.Index(dnsA, ":")
 			dnsB := dnsA
 			if pos == -1 {
 				dnsA += ":53"
-			}else {
-			  dnsB = dnsA[:pos]	
+			} else {
+				dnsB = dnsA[:pos]
 			}
 
 			// if (dnsB == "127.0.0.1") {
@@ -287,7 +282,7 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			// 	}
 			// }
 
-            ti, err := strIp2Int(dnsB)
+			ti, err := strIp2Int(dnsB)
 			is_chn_dns_server := c.route.testIpInList(ti)
 
 			addr, err := net.ResolveUDPAddr("udp", dnsA)
@@ -303,14 +298,14 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			}
 			defer cliConn.Close()
 
-			if (dnsB == out_ip)  {
-				   if out_key != "" {
+			if dnsB == out_ip {
+				if out_key != "" {
 					key := []byte(out_key)
-				    localBuf, err = my_aes.AesEncrypt(localBuf, key)
-				    if err != nil {
-				        panic(err)
-			        } 
-			     }
+					localBuf, err = my_aes.AesEncrypt(localBuf, key)
+					if err != nil {
+						panic(err)
+					}
+				}
 			}
 
 			// todo set timeout
@@ -332,27 +327,27 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 
 			if len(m.Answer) == 0 {
 				//log.Printf("WARN: answer size is 0 from %s for %s \n",dnsA,inputPara)
-				return 
+				return
 			}
 
 			flag := false
 			debugString := ""
 			isCname := true
 			for i, v := range m.Answer {
-                 
-                debugString = "Server:" + dnsA + " | "+inputPara +  "->" + getIpString(v.String()) 
+
+				debugString = "Server:" + dnsA + " | " + inputPara + "->" + getIpString(v.String())
 
 				ip, err := getIp(v.String())
 				if err != nil {
 
 					//log.Printf("ERROR: get ip error:%s:String(%s)\n", err, v.String())
-					
+
 					continue
 				}
 
 				isCname = false
 
-				//debugString = "Server:" + dnsA + " | "+inputPara +  "->" + getIpString(v.String()) 
+				//debugString = "Server:" + dnsA + " | "+inputPara +  "->" + getIpString(v.String())
 				//log.Printf("##%d##(server :%#v) (result :%#v %#v)\n", i, dnsA, getName(v.String()),getIpString(v.String()) )
 				if flag == false {
 					if flag = c.route.testIpInList(ip); flag == true {
@@ -361,53 +356,49 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 					}
 				}
 
-				if i>2 {
+				if i > 2 {
 
 				}
 			}
 
 			if flag {
-				// this is a china ip 
-				
+				// this is a china ip
+
 				// if (dnsAddr[0] == dnsB) || (dnsAddr[1] == dnsB) {
 				//   packet <- dnsPacket{"chinese", remoteBuf, debugString}
-			 //    }
+				//    }
 
-			 //    if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){
+				//    if ((dnsAddr[2] == dnsB) || (dnsAddr[3] == dnsB)){
 				//   packet <- dnsPacket{"chinese", remoteBuf, debugString}
-			 //    }
-                if is_chn_dns_server {
-                  packet <- dnsPacket{"chinese", remoteBuf, debugString}	
-                } else {
-                  log.Printf("ignore chn ip %v\n", debugString )
-			
-                  //packet <- dnsPacket{"chinese", remoteBuf, debugString}
-                }
+				//    }
+				if is_chn_dns_server {
+					packet <- dnsPacket{"chinese", remoteBuf, debugString}
+				} else {
+					log.Printf("ignore chn ip %v\n", debugString)
 
-
+					//packet <- dnsPacket{"chinese", remoteBuf, debugString}
+				}
 
 			} else {
-      
-                 // this is not a china ip
-                 
-                if (is_chn_dns_server == true) {
-                  // only process domestic dns return CNAME case. ignore Class A case
-                  if (isCname == true) {
-				    packet <- dnsPacket{"cname", remoteBuf, debugString}
-				  }else{
-				  	log.Printf("ignore oversea ip %v\n", debugString )
-				  } 
 
+				// this is not a china ip
 
-			    }else{  
+				if is_chn_dns_server == true {
+					// only process domestic dns return CNAME case. ignore Class A case
+					if isCname == true {
+						packet <- dnsPacket{"cname", remoteBuf, debugString}
+					} else {
+						log.Printf("ignore oversea ip %v\n", debugString)
+					}
 
+				} else {
 
-				  if (isCname == true) {
-				    packet <- dnsPacket{"cname", remoteBuf, debugString}
-				  }else{
-				  packet <- dnsPacket{"oversea", remoteBuf, debugString}
-				  }
-			    }
+					if isCname == true {
+						packet <- dnsPacket{"cname", remoteBuf, debugString}
+					} else {
+						packet <- dnsPacket{"oversea", remoteBuf, debugString}
+					}
+				}
 			}
 		}(dnsA)
 	}
@@ -420,19 +411,18 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 	select {
 
 	case p = <-packet:
-		
 
-		log.Printf("[%s] %s\n",p.dnsType, p.debugString)
+		log.Printf("[%s] %s\n", p.dnsType, p.debugString)
 
-	    conn.WriteToUDP(p.packet, remoteAddr)
+		conn.WriteToUDP(p.packet, remoteAddr)
 
-	    return
+		return
 
 	case <-timeout:
-		log.Printf("Query %s timeout!\n",inputPara)
+		log.Printf("Query %s timeout!\n", inputPara)
 		return
 	}
-	
+
 }
 
 func (c chinaDNS) handleClient(conn *net.UDPConn) {
@@ -447,13 +437,14 @@ func (c chinaDNS) handleClient(conn *net.UDPConn) {
 	if in_key != "" {
 		key := []byte(in_key)
 		localBuf, err = my_aes.AesDecrypt(localBuf, key)
-        if err != nil {
-          panic(err)
-        }
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	//log.Printf("DEBUG: read local udp data %d\n", n)
-	if n>2 {}
+	if n > 2 {
+	}
 
 	go func() {
 		c.selectPacket(conn, remoteAddr, localBuf)
@@ -480,22 +471,21 @@ func (c chinaDNS) updServe() {
 }
 
 func main() {
-   
 
-    //  port := ":53"
-    //  for i, v := range os.Args {
-    //     if i> 0 {
-    //       //fmt.Printf("%d %#v\n",i,v)
-    //       if v == "-s" {
-    //         fmt.Printf("%d %#v\n",i,os.Args[i+1])
-    //       }
+	//  port := ":53"
+	//  for i, v := range os.Args {
+	//     if i> 0 {
+	//       //fmt.Printf("%d %#v\n",i,v)
+	//       if v == "-s" {
+	//         fmt.Printf("%d %#v\n",i,os.Args[i+1])
+	//       }
 
-    //       if v == "-p" {
-    //         fmt.Printf("Listen on port %#v\n",os.Args[i+1])
-    //         port = ":" + os.Args[i+1]
-    //       }
-    //   }
-    // }
+	//       if v == "-p" {
+	//         fmt.Printf("Listen on port %#v\n",os.Args[i+1])
+	//         port = ":" + os.Args[i+1]
+	//       }
+	//   }
+	// }
 
 	sa := flag.String("sa", ":53", "dns addr:port")
 	fname := flag.String("fn", "/etc/chinadns/chnroute.txt", "china route list")
@@ -506,35 +496,33 @@ func main() {
 	flag.Parse()
 
 	if *ds != "" {
-		dnsAddr = strings.Split(*ds,",")
+		dnsAddr = strings.Split(*ds, ",")
 		for _, v := range dnsAddr {
 
-		  fmt.Printf("dns server = [%#v]\n",v)
-	    }
+			fmt.Printf("dns server = [%#v]\n", v)
+		}
 	}
 
 	if *ine != "" {
 		in_key = *ine
-		fmt.Printf("Incoming Ciph Enabled key = [%#v]\n",in_key)
+		fmt.Printf("Incoming Ciph Enabled key = [%#v]\n", in_key)
 	}
 
 	if *oue != "" {
 		out_key = *oue
-		fmt.Printf("outgoing Ciph Enabled key = [%#v]\n",out_key)
+		fmt.Printf("outgoing Ciph Enabled key = [%#v]\n", out_key)
 	}
 
 	if *ouip != "" {
 		out_ip = *ouip
-		fmt.Printf("outgoing Ciph Enabled ip = [%#v] ",out_ip)
+		fmt.Printf("outgoing Ciph Enabled ip = [%#v]\n", out_ip)
 	}
-
-
 
 	c := newChinaDNS(*fname, *sa)
 	if c == nil {
 		return
 	}
 	c.updServe()
-	
+
 	//TestnewRouteList()
 }
