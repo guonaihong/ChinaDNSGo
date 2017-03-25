@@ -301,7 +301,10 @@ func (c chinaDNS) selectPacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, local
 			if dnsB == out_ip {
 				if out_key != "" {
 					key := []byte(out_key)
-					localBuf, err = my_aes.AesEncrypt(localBuf, key)
+					//log.Printf("size before ciph %d\n", len(localBuf))
+					//encrypt will add 16 byte padding byte
+					localBuf, err = my_aes.AesEncrypt(localBuf[:1008], key)
+					//log.Printf("size after ciph %d\n", len(localBuf))
 					if err != nil {
 						panic(err)
 					}
