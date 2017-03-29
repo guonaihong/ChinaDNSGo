@@ -473,6 +473,15 @@ func (c chinaDNS) updServe() {
 	}
 }
 
+func Exists(name string) (bool, error) {
+	if _, err := os.Stat(name); err != nil {
+		if os.IsNotExist(err) {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 func main() {
 
 	//  port := ":53"
@@ -490,13 +499,19 @@ func main() {
 	//   }
 	// }
 
-	sa := flag.String("sa", ":53", "dns addr:port")
-	fname := flag.String("fn", "/etc/chinadns/chnroute.txt", "china route list")
-	ds := flag.String("ds", "", "dns server address")
-	ine := flag.String("ie", "", "ciph incoming traffic")
-	oue := flag.String("oe", "", "ciph outgoing traffic")
-	ouip := flag.String("ip", "", "outgoing traffic ip")
+	sa := flag.String("sa", ":53", "(must) dns addr:port")
+	fname := flag.String("fn", "/etc/chinadns/chnroute.txt", "(must)china route list")
+	ds := flag.String("ds", "", "(opt) dns server address")
+	ine := flag.String("ie", "", "(opt) ciph incoming traffic")
+	oue := flag.String("oe", "", "(opt) ciph outgoing traffic")
+	ouip := flag.String("ip", "", "(opt) outgoing traffic ip")
 	flag.Parse()
+
+	if ok, err := Exists(*fname); !ok {
+		log.Printf("ERROR: %v\n", err)
+		flag.Usage()
+		return
+	}
 
 	if *ds != "" {
 		dnsAddr = strings.Split(*ds, ",")
